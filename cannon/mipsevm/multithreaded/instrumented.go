@@ -15,9 +15,10 @@ import (
 type InstrumentedState struct {
 	state *State
 
-	log    log.Logger
-	stdOut io.Writer
-	stdErr io.Writer
+	log     log.Logger
+	metrics metrics.Metrics
+	stdOut  io.Writer
+	stdErr  io.Writer
 
 	memoryTracker *exec.MemoryTrackerImpl
 	stackTracker  ThreadedStackTracker
@@ -32,6 +33,7 @@ func NewInstrumentedState(state *State, po mipsevm.PreimageOracle, stdOut, stdEr
 	return &InstrumentedState{
 		state:          state,
 		log:            log,
+		metrics:        cannonMetrics,
 		stdOut:         stdOut,
 		stdErr:         stdErr,
 		memoryTracker:  exec.NewMemoryTracker(state.Memory),

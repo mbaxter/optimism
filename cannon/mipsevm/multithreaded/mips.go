@@ -328,6 +328,7 @@ func (m *InstrumentedState) handleMemoryUpdate(memAddr Word) {
 	if memAddr == m.state.LLAddress {
 		// Reserved address was modified, clear the reservation
 		m.clearLLMemoryReservation()
+		m.metrics.TrackLLReservationInvalidated()
 	}
 }
 
@@ -351,10 +352,14 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 	var retVal Word
 	threadId := m.state.GetCurrentThread().ThreadId
 	if opcode == exec.OpLoadLinked || opcode == exec.OpLoadLinked64 {
+		overwritesReservation := m.state.LLReservationActive
+
 		retVal = mem
 		m.state.LLReservationActive = true
 		m.state.LLAddress = effAddr
 		m.state.LLOwnerThread = threadId
+
+		m.metrics.TrackLLOp(m.state.GetStep(), overwritesReservation)
 	} else if opcode == exec.OpStoreConditional || opcode == exec.OpStoreConditional64 {
 		// TODO(#12205): Determine bits affected by coherence stores on 64-bits
 		// Check if our memory reservation is still intact
@@ -368,9 +373,13 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 				m.state.Memory.SetWord(effAddr, rt)
 			}
 			retVal = 1
+
+			m.metrics.TrackSCOpSuccess(m.state.GetStep())
 		} else {
 			// Atomic update failed, return 0 for failure
 			retVal = 0
+
+			m.metrics.TrackSCOpFailure()
 		}
 	} else {
 		panic(fmt.Sprintf("Invalid instruction passed to handleRMWOps (opcode %08x)", opcode))
