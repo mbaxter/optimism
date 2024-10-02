@@ -406,6 +406,8 @@ func (m *InstrumentedState) onWaitComplete(thread *ThreadState, isTimedOut bool)
 }
 
 func (m *InstrumentedState) preemptThread(thread *ThreadState) bool {
+	m.metrics.TrackPreemption(m.state.StepsSinceLastContextSwitch)
+
 	// Pop thread from the current stack and push to the other stack
 	if m.state.TraverseRight {
 		rtThreadCnt := len(m.state.RightThreadStack)

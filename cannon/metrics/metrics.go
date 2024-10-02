@@ -5,6 +5,7 @@ type Metrics interface {
 	TrackSCOpSuccess(step uint64)
 	TrackSCOpFailure()
 	TrackLLReservationInvalidated()
+	TrackPreemption(stepsSinceLastPreemption uint64)
 }
 
 type baseMetricsImpl struct {
@@ -39,7 +40,11 @@ func (m *baseMetricsImpl) TrackLLReservationInvalidated() {
 	m.recordRMWInvalidated()
 }
 
-// TODO(#12061) Override the following methods in a derived struct for the production metrics implementation
+func (m *baseMetricsImpl) TrackPreemption(stepsSinceLastPreemption uint64) {
+	m.recordPreemption(stepsSinceLastPreemption)
+}
+
+// TODO(#12061) Override or implement the following for the production metrics implementation
 
 func (n *baseMetricsImpl) recordRMWSuccess(totalSteps uint64) {}
 
@@ -48,3 +53,5 @@ func (n *baseMetricsImpl) recordRMWFailure() {}
 func (n *baseMetricsImpl) recordRMWInvalidated() {}
 
 func (n *baseMetricsImpl) recordRMWOverwritten() {}
+
+func (n *baseMetricsImpl) recordPreemption(stepsSinceLastPreemption uint64) {}
