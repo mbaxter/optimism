@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/ethereum-optimism/optimism/cannon/metrics"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/exec"
@@ -99,9 +100,9 @@ func CreateInitialState(pc, heapStart Word) *State {
 	return state
 }
 
-func (s *State) CreateVM(logger log.Logger, po mipsevm.PreimageOracle, stdOut, stdErr io.Writer, meta mipsevm.Metadata) mipsevm.FPVM {
+func (s *State) CreateVM(logger log.Logger, po mipsevm.PreimageOracle, stdOut, stdErr io.Writer, meta mipsevm.Metadata, cannonMetrics metrics.Metrics) mipsevm.FPVM {
 	logger.Info("Using cannon multithreaded VM", "is32", arch.IsMips32)
-	return NewInstrumentedState(s, po, stdOut, stdErr, logger, meta)
+	return NewInstrumentedState(s, po, stdOut, stdErr, logger, meta, cannonMetrics)
 }
 
 func (s *State) GetCurrentThread() *ThreadState {

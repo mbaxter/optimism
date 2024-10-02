@@ -11,6 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/pkg/profile"
+	"github.com/urfave/cli/v2"
+
+	"github.com/ethereum-optimism/optimism/cannon/metrics"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/program"
@@ -19,11 +26,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/serialize"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/pkg/profile"
-	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -374,7 +376,7 @@ func Run(ctx *cli.Context) error {
 		return fmt.Errorf("failed to load state: %w", err)
 	}
 	l.Info("Loaded input state", "version", state.Version)
-	vm := state.CreateVM(l, po, outLog, errLog, meta)
+	vm := state.CreateVM(l, po, outLog, errLog, meta, metrics.NewNoopMetrics())
 	debugProgram := ctx.Bool(RunDebugFlag.Name)
 	if debugProgram {
 		if metaPath := ctx.Path(RunMetaFlag.Name); metaPath == "" {

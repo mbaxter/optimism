@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 
+	"github.com/ethereum-optimism/optimism/cannon/metrics"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/exec"
@@ -420,7 +421,7 @@ func TestEVM_SysClone_FlagHandling(t *testing.T) {
 
 			var err error
 			var stepWitness *mipsevm.StepWitness
-			us := multithreaded.NewInstrumentedState(state, nil, os.Stdout, os.Stderr, nil, nil)
+			us := multithreaded.NewInstrumentedState(state, nil, os.Stdout, os.Stderr, nil, nil, metrics.NewNoopMetrics())
 			if !c.valid {
 				// The VM should exit
 				stepWitness, err = us.Step(true)

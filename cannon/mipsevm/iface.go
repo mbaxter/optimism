@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/ethereum-optimism/optimism/cannon/metrics"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/arch"
 	"github.com/ethereum-optimism/optimism/cannon/mipsevm/memory"
 	"github.com/ethereum-optimism/optimism/op-service/serialize"
@@ -58,7 +59,7 @@ type FPVMState interface {
 	EncodeWitness() (witness []byte, hash common.Hash)
 
 	// CreateVM creates a FPVM that can operate on this state.
-	CreateVM(logger log.Logger, po PreimageOracle, stdOut, stdErr io.Writer, meta Metadata) FPVM
+	CreateVM(logger log.Logger, po PreimageOracle, stdOut, stdErr io.Writer, meta Metadata, cannonMetrics metrics.Metrics) FPVM
 }
 
 type SymbolMatcher func(addr arch.Word) bool
