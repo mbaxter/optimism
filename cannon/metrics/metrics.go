@@ -19,7 +19,12 @@ type baseMetricsImpl struct {
 var _ Metrics = (*baseMetricsImpl)(nil)
 
 func NewNoopMetrics() Metrics {
-	return &baseMetricsImpl{
+	impl := newBaseMetrics()
+	return &impl
+}
+
+func newBaseMetrics() baseMetricsImpl {
+	return baseMetricsImpl{
 		lastLLOpStep:                    0,
 		rmwSuccessCount:                 0,
 		rmwFailureCount:                 0,
