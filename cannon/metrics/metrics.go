@@ -8,7 +8,16 @@ type Metrics interface {
 	TrackPreemption(stepsSinceLastPreemption uint64)
 }
 
-type baseMetricsImpl struct {
+type metricsEngine interface {
+	recordRMWSuccess(count uint64, totalSteps uint64)
+	recordRMWFailure(count uint64)
+	recordRMWInvalidated(count uint64)
+	recordRMWOverwritten(count uint64)
+	recordPreemption(stepsSinceLastPreemption uint64)
+}
+
+type metricsImpl struct {
+	engine                          metricsEngine
 	lastLLOpStep                    uint64
 	rmwSuccessCount                 uint64
 	rmwFailureCount                 uint64
@@ -16,15 +25,11 @@ type baseMetricsImpl struct {
 	rmwReservationOverwriteCount    uint64
 }
 
-var _ Metrics = (*baseMetricsImpl)(nil)
+var _ Metrics = (*metricsImpl)(nil)
 
-func NewNoopMetrics() Metrics {
-	impl := newBaseMetrics()
-	return &impl
-}
-
-func newBaseMetrics() baseMetricsImpl {
-	return baseMetricsImpl{
+func newMetrics(engine metricsEngine) Metrics {
+	return &metricsImpl{
+		engine:                          engine,
 		lastLLOpStep:                    0,
 		rmwSuccessCount:                 0,
 		rmwFailureCount:                 0,
@@ -33,42 +38,30 @@ func newBaseMetrics() baseMetricsImpl {
 	}
 }
 
-func (m *baseMetricsImpl) TrackLLOp(step uint64, overwritesExistingReservation bool) {
+func (m *metricsImpl) TrackLLOp(step uint64, overwritesExistingReservation bool) {
 	if overwritesExistingReservation {
 		m.rmwReservationOverwriteCount += 1
-		m.recordRMWOverwritten(m.rmwReservationOverwriteCount)
+		m.engine.recordRMWOverwritten(m.rmwReservationOverwriteCount)
 	}
 	m.lastLLOpStep = step
 }
 
-func (m *baseMetricsImpl) TrackSCOpSuccess(step uint64) {
+func (m *metricsImpl) TrackSCOpSuccess(step uint64) {
 	m.rmwSuccessCount += 1
 	totalSteps := step - m.lastLLOpStep
-	m.recordRMWSuccess(m.rmwSuccessCount, totalSteps)
+	m.engine.recordRMWSuccess(m.rmwSuccessCount, totalSteps)
 }
 
-func (m *baseMetricsImpl) TrackSCOpFailure() {
+func (m *metricsImpl) TrackSCOpFailure() {
 	m.rmwFailureCount += 1
-	m.recordRMWFailure(m.rmwFailureCount)
+	m.engine.recordRMWFailure(m.rmwFailureCount)
 }
 
-func (m *baseMetricsImpl) TrackLLReservationInvalidated() {
+func (m *metricsImpl) TrackLLReservationInvalidated() {
 	m.rmwReservationInvalidationCount += 1
-	m.recordRMWInvalidated(m.rmwReservationInvalidationCount)
+	m.engine.recordRMWInvalidated(m.rmwReservationInvalidationCount)
 }
 
-func (m *baseMetricsImpl) TrackPreemption(stepsSinceLastPreemption uint64) {
-	m.recordPreemption(stepsSinceLastPreemption)
+func (m *metricsImpl) TrackPreemption(stepsSinceLastPreemption uint64) {
+	m.engine.recordPreemption(stepsSinceLastPreemption)
 }
-
-// TODO(#12061) Override or implement the following for the production metrics implementation
-
-func (n *baseMetricsImpl) recordRMWSuccess(count uint64, totalSteps uint64) {}
-
-func (n *baseMetricsImpl) recordRMWFailure(count uint64) {}
-
-func (n *baseMetricsImpl) recordRMWInvalidated(count uint64) {}
-
-func (n *baseMetricsImpl) recordRMWOverwritten(count uint64) {}
-
-func (n *baseMetricsImpl) recordPreemption(stepsSinceLastPreemption uint64) {}

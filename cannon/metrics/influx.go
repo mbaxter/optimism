@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,69 +10,106 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-type influxMetrics struct {
-	baseMetricsImpl
-	category     string
+const versionTag = "cannon_version"
+
+type influxMetricsEngine struct {
 	influxClient *InfluxClient
+	// Used to apply a cannon_version tag to all metrics
+	cannonVersion string
+	logger        log.Logger
 }
 
-var _ Metrics = (*influxMetrics)(nil)
+var _ metricsEngine = (*influxMetricsEngine)(nil)
 
-func NewInfluxMetrics(category string, config InfluxConfig, logger log.Logger) Metrics {
+func NewInfluxMetrics(config InfluxConfig, cannonVersion string, logger log.Logger) Metrics {
 	influxClient := NewInfluxClient(config, logger)
-	return &influxMetrics{baseMetricsImpl: newBaseMetrics(), category: category, influxClient: influxClient}
+	engine := &influxMetricsEngine{influxClient: influxClient, cannonVersion: cannonVersion, logger: logger}
+	return newMetrics(engine)
 }
 
-func (m *influxMetrics) recordRMWSuccess(count uint64, totalSteps uint64) {
-	m.influxClient.PushMetric(Metric{
-		Measurement: m.category,
-		Fields: map[string]uint64{
-			"rmw_success_count": count,
-			"rmw_step_count":    totalSteps,
+func (m *influxMetricsEngine) recordRMWSuccess(count uint64, totalSteps uint64) {
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_rmw_success_count",
+			Value:       count,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+			},
+		},
+		{
+			Measurement: "cannon_rmw_steps",
+			Value:       totalSteps,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+			},
 		},
 	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
 }
 
-func (m *influxMetrics) recordRMWFailure(count uint64) {
-	m.influxClient.PushMetric(Metric{
-		Measurement: m.category,
-		Fields: map[string]uint64{
-			"rmw_failure_count": count,
+func (m *influxMetricsEngine) recordRMWFailure(count uint64) {
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_rmw_failure_count",
+			Value:       count,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+			},
 		},
 	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
 }
 
-func (m *influxMetrics) recordRMWInvalidated(count uint64) {
-	m.influxClient.PushMetric(Metric{
-		Measurement: m.category,
-		Tags: map[string]string{
-			"reason": "memory_invalidated",
-		},
-		Fields: map[string]uint64{
-			"rmw_reset_count": count,
+func (m *influxMetricsEngine) recordRMWInvalidated(count uint64) {
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_rmw_reset_count",
+			Value:       count,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+				"reason":   "invalidated",
+			},
 		},
 	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
 }
 
-func (m *influxMetrics) recordRMWOverwritten(count uint64) {
-	m.influxClient.PushMetric(Metric{
-		Measurement: m.category,
-		Tags: map[string]string{
-			"reason": "overwritten",
-		},
-		Fields: map[string]uint64{
-			"rmw_reset_count": count,
+func (m *influxMetricsEngine) recordRMWOverwritten(count uint64) {
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_rmw_reset_count",
+			Value:       count,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+				"reason":   "overwritten",
+			},
 		},
 	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
 }
 
-func (m *influxMetrics) recordPreemption(stepsSinceLastPreemption uint64) {
-	m.influxClient.PushMetric(Metric{
-		Measurement: m.category,
-		Fields: map[string]uint64{
-			"steps_at_preemption": stepsSinceLastPreemption,
+func (m *influxMetricsEngine) recordPreemption(stepsSinceLastPreemption uint64) {
+	m.logger.Info("Record preemption")
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_step_count_at_preemption",
+			Value:       stepsSinceLastPreemption,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+			},
 		},
 	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
 }
 
 type InfluxClient struct {
@@ -82,31 +118,33 @@ type InfluxClient struct {
 }
 
 type InfluxConfig struct {
-	URL      string `json:"url"`
-	User     string `json:"user"`
-	Password string `json:"pass"`
+	URL    string
+	UserId string
+	Token  string
 }
 
-type Metric struct {
+type InfluxMetric struct {
 	Measurement string
 	Tags        map[string]string
-	Fields      map[string]uint64
+	Value       uint64
 }
 
 func NewInfluxClient(config InfluxConfig, logger log.Logger) *InfluxClient {
 	return &InfluxClient{config: config, logger: logger}
 }
 
-func (c *InfluxClient) PushMetric(metric Metric) error {
-	payload := []byte(c.createLineProtocolPayload(metric))
+func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
+	payload := []byte(c.createLineProtocolPayload(metrics))
 	buffer := bytes.NewBuffer(payload)
+	c.logger.Debug("Push metrics payload", "payload", payload)
 
+	authToken := fmt.Sprintf("Bearer %s:%s", c.config.UserId, c.config.Token)
 	request, err := http.NewRequest(http.MethodPost, c.config.URL, buffer)
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Content-Type", "text/plain")
-	request.Header.Set("Authorization", c.authToken())
+	request.Header.Set("Authorization", authToken)
 
 	// Create an HTTP client and send the request
 	client := &http.Client{}
@@ -122,38 +160,31 @@ func (c *InfluxClient) PushMetric(metric Metric) error {
 		}
 	}(response.Body)
 
+	c.logger.Debug("Got metrics response", "status", response.StatusCode)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("received non-2xx response: %d %s", response.StatusCode, response.Status)
 	}
 	return nil
 }
 
-// authToken creates a basic auth token for the given user and password
-func (c *InfluxClient) authToken() string {
-	// Add basic authentication header
-	auth := c.config.User + ":" + c.config.Password
-	return "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
-}
-
-// createLineProtocolPayload creates a line protocol payload for a single metric
-func (c *InfluxClient) createLineProtocolPayload(metric Metric) string {
-	return fmt.Sprintf("%s,%s %s", metric.Measurement, c.fmtTags(metric.Tags), c.fmtFields(metric.Fields))
+// createLineProtocolPayload creates a line protocol payload for a set of metrics
+func (c *InfluxClient) createLineProtocolPayload(metrics []InfluxMetric) string {
+	formatted := make([]string, len(metrics))
+	for i, metric := range metrics {
+		formatted[i] = fmt.Sprintf("%s%s metric=%d", metric.Measurement, c.fmtTags(metric.Tags), metric.Value)
+	}
+	return strings.Join(formatted, "\n")
 }
 
 // fmtTags formats a map of labels into a comma-separated string of key=value pairs
 func (c *InfluxClient) fmtTags(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
 	formattedLabels := make([]string, 0)
 	for k, v := range labels {
 		formattedLabels = append(formattedLabels, fmt.Sprintf("%s=%s", k, v))
 	}
-	return strings.Join(formattedLabels, ",")
-}
-
-// fmtTags formats a map of uint fields into a comma-separated string of key=value pairs
-func (c *InfluxClient) fmtFields(fields map[string]uint64) string {
-	formatted := make([]string, 0)
-	for k, v := range fields {
-		formatted = append(formatted, fmt.Sprintf("%s=%du", k, v))
-	}
-	return strings.Join(formatted, ",")
+	return "," + strings.Join(formattedLabels, ",")
 }
