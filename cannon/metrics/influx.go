@@ -111,12 +111,9 @@ func NewInfluxClient(config InfluxConfig, logger log.Logger) *InfluxClient {
 }
 
 func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
-	payload := []byte(c.createLineProtocolPayload(metrics))
-	buffer := bytes.NewBuffer(payload)
-	c.logger.Debug("Push metrics payload", "payload", payload)
-
+	payload := c.createLineProtocolPayload(metrics)
 	authToken := fmt.Sprintf("Bearer %s:%s", c.config.UserId, c.config.Token)
-	request, err := http.NewRequest(http.MethodPost, c.config.URL, buffer)
+	request, err := http.NewRequest(http.MethodPost, c.config.URL, payload)
 	if err != nil {
 		return err
 	}
@@ -144,12 +141,12 @@ func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
 }
 
 // createLineProtocolPayload creates a line protocol payload for a set of metrics
-func (c *InfluxClient) createLineProtocolPayload(metrics []InfluxMetric) string {
-	formatted := make([]string, len(metrics))
-	for i, metric := range metrics {
-		formatted[i] = fmt.Sprintf("%s%s metric=%d", metric.Measurement, c.fmtTags(metric.Tags), metric.Value)
+func (c *InfluxClient) createLineProtocolPayload(metrics []InfluxMetric) *bytes.Buffer {
+	buf := new(bytes.Buffer)
+	for _, metric := range metrics {
+		buf.WriteString(fmt.Sprintf("%s%s metric=%d\n", metric.Measurement, c.fmtTags(metric.Tags), metric.Value))
 	}
-	return strings.Join(formatted, "\n")
+	return buf
 }
 
 // fmtTags formats a map of labels into a comma-separated string of key=value pairs
