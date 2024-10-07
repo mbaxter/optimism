@@ -12,6 +12,8 @@ type debugMetricsEngine struct {
 	logger log.Logger
 }
 
+var _ metricsEngine = (*debugMetricsEngine)(nil)
+
 func NewDebugMetrics() Metrics {
 	logger, err := createDebugLogger()
 	if err != nil {
@@ -20,6 +22,10 @@ func NewDebugMetrics() Metrics {
 	engine := &debugMetricsEngine{logger: logger}
 	return newMetrics(engine)
 }
+
+func (m *debugMetricsEngine) Start() {}
+
+func (m *debugMetricsEngine) Stop() {}
 
 func (m *debugMetricsEngine) recordRMWFailure(count uint64) {
 	m.logger.Debug("recordRMWFailure", "count", count)

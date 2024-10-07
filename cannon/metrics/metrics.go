@@ -1,6 +1,7 @@
 package metrics
 
 type Metrics interface {
+	Service
 	TrackLLOp(step uint64)
 	TrackSCOpFailure()
 	TrackLLReservationInvalidated()
@@ -11,6 +12,7 @@ type Metrics interface {
 }
 
 type metricsEngine interface {
+	Service
 	recordRMWFailure(count uint64)
 	recordRMWInvalidated(count uint64)
 	recordForcedPreemption(count uint64)
@@ -38,6 +40,14 @@ func newMetrics(engine metricsEngine) Metrics {
 		forcedPreemptionCount:           0,
 		wakeupMissCount:                 0,
 	}
+}
+
+func (m *metricsImpl) Start() {
+	m.engine.Start()
+}
+
+func (m *metricsImpl) Stop() {
+	m.engine.Stop()
 }
 
 func (m *metricsImpl) TrackLLOp(step uint64) {

@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -13,79 +15,132 @@ import (
 const versionTag = "cannon_version"
 
 type influxMetricsEngine struct {
-	influxClient *InfluxClient
-	// Used to apply a cannon_version tag to all metrics
-	cannonVersion string
-	logger        log.Logger
+	influxClient   *InfluxClient
+	cannonVersion  string
+	batchSize      int
+	pendingMetrics []InfluxMetric
+	pushTimer      *time.Ticker
+	stopChan       chan struct{}
+	mutex          sync.Mutex
+	logger         log.Logger
+	state          ServiceState
 }
 
 var _ metricsEngine = (*influxMetricsEngine)(nil)
 
 func NewInfluxMetrics(config InfluxConfig, cannonVersion string, logger log.Logger) Metrics {
+	pushInterval := 1 * time.Second
+	batchSize := 50
+	pushTimer := time.NewTicker(pushInterval)
 	influxClient := NewInfluxClient(config, logger)
-	engine := &influxMetricsEngine{influxClient: influxClient, cannonVersion: cannonVersion, logger: logger}
+	engine := &influxMetricsEngine{influxClient: influxClient, cannonVersion: cannonVersion, batchSize: batchSize, pushTimer: pushTimer, stopChan: make(chan struct{}), logger: logger}
+
 	return newMetrics(engine)
 }
 
-func (m *influxMetricsEngine) recordRMWFailure(count uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_rmw_failure_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-			},
-		},
-	})
+func (m *influxMetricsEngine) Start() {
+	if m.state == Idle {
+		m.state = Running
+		go m.periodicPush()
+	}
+}
+
+func (m *influxMetricsEngine) Stop() {
+	if m.state == Running {
+		if len(m.pendingMetrics) != 0 {
+			// Flush remaining data
+			m.mutex.Lock()
+			defer m.mutex.Unlock()
+			m.push()
+		}
+		m.state = Stopped
+		close(m.stopChan)
+	}
+}
+
+func (m *influxMetricsEngine) recordMetric(metric InfluxMetric) {
+	if m.state != Running {
+		m.logger.Error("Must be running to record metrics", "state", m.state)
+		return
+	}
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	m.pendingMetrics = append(m.pendingMetrics, metric)
+
+	// Flush if we've hit the batch size
+	if len(m.pendingMetrics) >= m.batchSize {
+		m.push()
+	}
+}
+
+func (m *influxMetricsEngine) periodicPush() {
+	for {
+		select {
+		case <-m.pushTimer.C:
+			m.mutex.Lock()
+			m.push()
+			m.mutex.Unlock()
+		case <-m.stopChan:
+			m.pushTimer.Stop()
+			return
+		}
+	}
+}
+
+func (m *influxMetricsEngine) push() {
+	if len(m.pendingMetrics) == 0 {
+		return
+	}
+
+	err := m.influxClient.PushMetrics(m.pendingMetrics)
 	if err != nil {
 		m.logger.Error("Failed to push metrics", "err", err)
 	}
+
+	m.pendingMetrics = []InfluxMetric{}
+}
+
+func (m *influxMetricsEngine) recordRMWFailure(count uint64) {
+	m.recordMetric(InfluxMetric{
+		Measurement: "cannon_rmw_failure_count",
+		Value:       count,
+		Tags: map[string]string{
+			versionTag: m.cannonVersion,
+		},
+	})
 }
 
 func (m *influxMetricsEngine) recordRMWInvalidated(count uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_rmw_reset_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-				"reason":   "invalidated",
-			},
+	m.recordMetric(InfluxMetric{
+		Measurement: "cannon_rmw_reset_count",
+		Value:       count,
+		Tags: map[string]string{
+			versionTag: m.cannonVersion,
+			"reason":   "invalidated",
 		},
 	})
-	if err != nil {
-		m.logger.Error("Failed to push metrics", "err", err)
-	}
 }
 
 func (m *influxMetricsEngine) recordForcedPreemption(count uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_forced_preemption_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-			},
+	m.recordMetric(InfluxMetric{
+		Measurement: "cannon_forced_preemption_count",
+		Value:       count,
+		Tags: map[string]string{
+			versionTag: m.cannonVersion,
 		},
 	})
-	if err != nil {
-		m.logger.Error("Failed to push metrics", "err", err)
-	}
 }
 
 func (m *influxMetricsEngine) recordWakeupMiss(count uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_wakeup_miss_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-			},
+	m.recordMetric(InfluxMetric{
+		Measurement: "cannon_wakeup_miss_count",
+		Value:       count,
+		Tags: map[string]string{
+			versionTag: m.cannonVersion,
 		},
 	})
-	if err != nil {
-		m.logger.Error("Failed to push metrics", "err", err)
-	}
 }
 
 type InfluxClient struct {

@@ -8,6 +8,10 @@ type noopMetricsEngine struct{}
 
 var _ metricsEngine = (*noopMetricsEngine)(nil)
 
+func (n *noopMetricsEngine) Start() {}
+
+func (n *noopMetricsEngine) Stop() {}
+
 func (n noopMetricsEngine) recordRMWFailure(count uint64) {}
 
 func (n noopMetricsEngine) recordRMWInvalidated(count uint64) {}
