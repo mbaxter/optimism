@@ -89,8 +89,9 @@ func (m *influxMetricsEngine) recordWakeupMiss(count uint64) {
 }
 
 type InfluxClient struct {
-	config InfluxConfig
-	logger log.Logger
+	config     InfluxConfig
+	logger     log.Logger
+	httpClient *http.Client
 }
 
 type InfluxConfig struct {
@@ -106,7 +107,7 @@ type InfluxMetric struct {
 }
 
 func NewInfluxClient(config InfluxConfig, logger log.Logger) *InfluxClient {
-	return &InfluxClient{config: config, logger: logger}
+	return &InfluxClient{config: config, logger: logger, httpClient: &http.Client{}}
 }
 
 func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
@@ -123,8 +124,7 @@ func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
 	request.Header.Set("Authorization", authToken)
 
 	// Create an HTTP client and send the request
-	client := &http.Client{}
-	response, err := client.Do(request) //nolint:bodyclose
+	response, err := c.httpClient.Do(request) //nolint:bodyclose
 	if err != nil {
 		return err
 	}
