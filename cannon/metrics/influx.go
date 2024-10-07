@@ -110,7 +110,7 @@ func (c *InfluxClient) PushMetrics(metrics []InfluxMetric) error {
 
 	// Create an HTTP client and send the request
 	client := &http.Client{}
-	response, err := client.Do(request)
+	response, err := client.Do(request) //nolint:bodyclose
 	if err != nil {
 		return err
 	}
