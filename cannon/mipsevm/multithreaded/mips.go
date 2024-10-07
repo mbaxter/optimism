@@ -281,6 +281,7 @@ func (m *InstrumentedState) mipsStep() error {
 	if m.state.StepsSinceLastContextSwitch >= exec.SchedQuantum {
 		// Force a context switch as this thread has been active too long
 		if m.state.ThreadCount() > 1 {
+			m.metrics.TrackForcedPreemption()
 			// Log if we're hitting our context switch limit - only matters if we have > 1 thread
 			if m.log.Enabled(context.Background(), log.LevelTrace) {
 				msg := fmt.Sprintf("Thread has reached maximum execution steps (%v) - preempting.", exec.SchedQuantum)
@@ -352,14 +353,12 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 	var retVal Word
 	threadId := m.state.GetCurrentThread().ThreadId
 	if opcode == exec.OpLoadLinked || opcode == exec.OpLoadLinked64 {
-		overwritesReservation := m.state.LLReservationActive
-
 		retVal = mem
 		m.state.LLReservationActive = true
 		m.state.LLAddress = effAddr
 		m.state.LLOwnerThread = threadId
 
-		m.metrics.TrackLLOp(m.state.GetStep(), overwritesReservation)
+		m.metrics.TrackLLOp(m.state.GetStep())
 	} else if opcode == exec.OpStoreConditional || opcode == exec.OpStoreConditional64 {
 		// TODO(#12205): Determine bits affected by coherence stores on 64-bits
 		// Check if our memory reservation is still intact
@@ -373,8 +372,6 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 				m.state.Memory.SetWord(effAddr, rt)
 			}
 			retVal = 1
-
-			m.metrics.TrackSCOpSuccess(m.state.GetStep())
 		} else {
 			// Atomic update failed, return 0 for failure
 			retVal = 0
@@ -406,8 +403,6 @@ func (m *InstrumentedState) onWaitComplete(thread *ThreadState, isTimedOut bool)
 }
 
 func (m *InstrumentedState) preemptThread(thread *ThreadState) bool {
-	m.metrics.TrackPreemption(m.state.StepsSinceLastContextSwitch)
-
 	// Pop thread from the current stack and push to the other stack
 	if m.state.TraverseRight {
 		rtThreadCnt := len(m.state.RightThreadStack)

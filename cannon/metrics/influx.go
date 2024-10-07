@@ -27,28 +27,6 @@ func NewInfluxMetrics(config InfluxConfig, cannonVersion string, logger log.Logg
 	return newMetrics(engine)
 }
 
-func (m *influxMetricsEngine) recordRMWSuccess(count uint64, totalSteps uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_rmw_success_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-			},
-		},
-		{
-			Measurement: "cannon_rmw_steps",
-			Value:       totalSteps,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-			},
-		},
-	})
-	if err != nil {
-		m.logger.Error("Failed to push metrics", "err", err)
-	}
-}
-
 func (m *influxMetricsEngine) recordRMWFailure(count uint64) {
 	err := m.influxClient.PushMetrics([]InfluxMetric{
 		{
@@ -80,28 +58,12 @@ func (m *influxMetricsEngine) recordRMWInvalidated(count uint64) {
 	}
 }
 
-func (m *influxMetricsEngine) recordRMWOverwritten(count uint64) {
-	err := m.influxClient.PushMetrics([]InfluxMetric{
-		{
-			Measurement: "cannon_rmw_reset_count",
-			Value:       count,
-			Tags: map[string]string{
-				versionTag: m.cannonVersion,
-				"reason":   "overwritten",
-			},
-		},
-	})
-	if err != nil {
-		m.logger.Error("Failed to push metrics", "err", err)
-	}
-}
-
-func (m *influxMetricsEngine) recordPreemption(stepsSinceLastPreemption uint64) {
+func (m *influxMetricsEngine) recordForcedPreemption(count uint64) {
 	m.logger.Info("Record preemption")
 	err := m.influxClient.PushMetrics([]InfluxMetric{
 		{
-			Measurement: "cannon_step_count_at_preemption",
-			Value:       stepsSinceLastPreemption,
+			Measurement: "cannon_forced_preemption_count",
+			Value:       count,
 			Tags: map[string]string{
 				versionTag: m.cannonVersion,
 			},

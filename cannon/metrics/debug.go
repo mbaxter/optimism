@@ -21,10 +21,6 @@ func NewDebugMetrics() Metrics {
 	return newMetrics(engine)
 }
 
-func (m *debugMetricsEngine) recordRMWSuccess(count uint64, totalSteps uint64) {
-	m.logger.Debug("recordRMWSuccess", "count", count, "steps", totalSteps)
-}
-
 func (m *debugMetricsEngine) recordRMWFailure(count uint64) {
 	m.logger.Debug("recordRMWFailure", "count", count)
 }
@@ -33,12 +29,8 @@ func (m *debugMetricsEngine) recordRMWInvalidated(count uint64) {
 	m.logger.Debug("recordRMWInvalidated", "count", count)
 }
 
-func (m *debugMetricsEngine) recordRMWOverwritten(count uint64) {
-	m.logger.Debug("recordRMWOverwritten", "count", count)
-}
-
-func (m *debugMetricsEngine) recordPreemption(stepsSinceLastPreemption uint64) {
-	m.logger.Debug("recordPreemption", "steps", stepsSinceLastPreemption)
+func (m *debugMetricsEngine) recordForcedPreemption(count uint64) {
+	m.logger.Debug("recordForcedPreemption", "count", count)
 }
 
 func createDebugLogger() (log.Logger, error) {
