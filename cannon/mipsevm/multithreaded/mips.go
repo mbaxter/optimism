@@ -128,6 +128,8 @@ func (m *InstrumentedState) handleSyscall() error {
 				return nil
 			}
 		case exec.FutexWakePrivate:
+			m.metrics.TrackWakeupTraversal()
+
 			// Trigger thread traversal starting from the left stack until we find one waiting on the wakeup
 			// address
 			m.state.Wakeup = effAddr
@@ -268,6 +270,7 @@ func (m *InstrumentedState) mipsStep() error {
 			if thread.FutexVal == mem {
 				// still got expected value, continue sleeping, try next thread.
 				m.preemptThread(thread)
+				m.metrics.TrackWakeupMiss()
 				return nil
 			} else {
 				// wake thread up, the value at its address changed!
@@ -386,6 +389,8 @@ func (m *InstrumentedState) handleRMWOps(insn, opcode uint32) error {
 }
 
 func (m *InstrumentedState) onWaitComplete(thread *ThreadState, isTimedOut bool) {
+	m.metrics.TrackWakeupHit()
+
 	// Note: no need to reset m.state.Wakeup.  If we're here, the Wakeup field has already been reset
 	// Clear the futex state
 	thread.FutexAddr = exec.FutexEmptyAddr

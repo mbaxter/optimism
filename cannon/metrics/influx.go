@@ -59,10 +59,24 @@ func (m *influxMetricsEngine) recordRMWInvalidated(count uint64) {
 }
 
 func (m *influxMetricsEngine) recordForcedPreemption(count uint64) {
-	m.logger.Info("Record preemption")
 	err := m.influxClient.PushMetrics([]InfluxMetric{
 		{
 			Measurement: "cannon_forced_preemption_count",
+			Value:       count,
+			Tags: map[string]string{
+				versionTag: m.cannonVersion,
+			},
+		},
+	})
+	if err != nil {
+		m.logger.Error("Failed to push metrics", "err", err)
+	}
+}
+
+func (m *influxMetricsEngine) recordWakeupMiss(count uint64) {
+	err := m.influxClient.PushMetrics([]InfluxMetric{
+		{
+			Measurement: "cannon_wakeup_miss_count",
 			Value:       count,
 			Tags: map[string]string{
 				versionTag: m.cannonVersion,

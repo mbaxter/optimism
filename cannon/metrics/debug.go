@@ -33,6 +33,10 @@ func (m *debugMetricsEngine) recordForcedPreemption(count uint64) {
 	m.logger.Debug("recordForcedPreemption", "count", count)
 }
 
+func (m *debugMetricsEngine) recordWakeupMiss(count uint64) {
+	m.logger.Debug("recordWakeupMiss", "count", count)
+}
+
 func createDebugLogger() (log.Logger, error) {
 	file, err := os.OpenFile("cannon-metrics.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0666)
 	if err != nil {
