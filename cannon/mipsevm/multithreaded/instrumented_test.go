@@ -34,6 +34,26 @@ func TestInstrumentedState_Claim(t *testing.T) {
 	testutil.RunVMTest_Claim(t, CreateInitialState, vmFactory, false)
 }
 
+func TestInstrumentedState_ThreadStarvation(t *testing.T) {
+	state, _ := testutil.LoadELFProgram(t, testutil.ProgramPath("thread-starvation-01"), CreateInitialState, false)
+	oracle := testutil.StaticOracle(t, []byte{})
+
+	var stdOutBuf, stdErrBuf bytes.Buffer
+	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), testutil.CreateLogger(), nil)
+	for i := 0; i < 2_000_000; i++ {
+		if us.GetState().GetExited() {
+			break
+		}
+		_, err := us.Step(false)
+		require.NoError(t, err)
+	}
+	t.Logf("Completed in %d steps", state.Step)
+
+	require.True(t, state.Exited, "must complete program")
+	require.Equal(t, uint8(0), state.ExitCode, "exit with 0")
+	require.Equal(t, "", stdErrBuf.String(), "should not print any errors")
+}
+
 func TestInstrumentedState_MultithreadedProgram(t *testing.T) {
 	t.Parallel()
 	state, _ := testutil.LoadELFProgram(t, testutil.ProgramPath("multithreaded"), CreateInitialState, false)
