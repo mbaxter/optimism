@@ -39,7 +39,7 @@ func TestInstrumentedState_ThreadStarvation(t *testing.T) {
 	oracle := testutil.StaticOracle(t, []byte{})
 
 	var stdOutBuf, stdErrBuf bytes.Buffer
-	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), testutil.CreateLogger(), nil)
+	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), testutil.CreateTraceLogger(), nil)
 	for i := 0; i < 2_000_000; i++ {
 		if us.GetState().GetExited() {
 			break

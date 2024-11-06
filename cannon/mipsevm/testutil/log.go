@@ -9,3 +9,7 @@ import (
 func CreateLogger() log.Logger {
 	return log.NewLogger(log.LogfmtHandlerWithLevel(os.Stdout, log.LevelInfo))
 }
+
+func CreateTraceLogger() log.Logger {
+	return log.NewLogger(log.LogfmtHandlerWithLevel(os.Stdout, log.LevelTrace))
+}

@@ -32,6 +32,10 @@ func (m *InstrumentedState) handleSyscall() error {
 	case arch.SysBrk:
 		v0 = program.PROGRAM_BREAK
 	case arch.SysClone: // clone
+		if m.log.Enabled(context.Background(), log.LevelTrace) {
+			msg := fmt.Sprintf("Create new thread: %v", m.state.NextThreadId)
+			m.log.Trace(msg, "step", m.state.GetStep())
+		}
 		// a0 = flag bitmask, a1 = stack pointer
 		if exec.ValidCloneFlags != a0 {
 			m.state.Exited = true
@@ -136,7 +140,7 @@ func (m *InstrumentedState) handleSyscall() error {
 			v0 = 0
 			v1 = 0
 			exec.HandleSyscallUpdates(&thread.Cpu, &thread.Registers, v0, v1)
-			m.preemptThread(thread)
+			m.preemptThread(thread, "FutexWake")
 			m.state.TraverseRight = len(m.state.LeftThreadStack) == 0
 			return nil
 		default:
@@ -147,7 +151,7 @@ func (m *InstrumentedState) handleSyscall() error {
 		v0 = 0
 		v1 = 0
 		exec.HandleSyscallUpdates(&thread.Cpu, &thread.Registers, v0, v1)
-		m.preemptThread(thread)
+		m.preemptThread(thread, fmt.Sprintf("Yield / Sleep: %v", syscallNum))
 		return nil
 	case arch.SysOpen:
 		v0 = exec.SysErrorSignal
@@ -257,7 +261,7 @@ func (m *InstrumentedState) doMipsStep() error {
 		} else {
 			// This is not the thread we're looking for, move on
 			traversingRight := m.state.TraverseRight
-			changedDirections := m.preemptThread(thread)
+			changedDirections := m.preemptThread(thread, "Wakeup traversal")
 			if traversingRight && changedDirections {
 				// We started the wakeup traversal walking left and we've now walked all the way right
 				// We have therefore visited all threads and can resume normal thread execution
@@ -287,7 +291,7 @@ func (m *InstrumentedState) doMipsStep() error {
 			mem := m.state.Memory.GetWord(effAddr)
 			if thread.FutexVal == mem {
 				// still got expected value, continue sleeping, try next thread.
-				m.preemptThread(thread)
+				m.preemptThread(thread, "Encountered unwakeable thread")
 				return nil
 			} else {
 				// wake thread up, the value at its address changed!
@@ -307,7 +311,7 @@ func (m *InstrumentedState) doMipsStep() error {
 				m.log.Trace(msg, "threadId", thread.ThreadId, "threadCount", m.state.ThreadCount(), "pc", thread.Cpu.PC)
 			}
 		}
-		m.preemptThread(thread)
+		m.preemptThread(thread, "SchedQuantum")
 		return nil
 	}
 	m.state.StepsSinceLastContextSwitch += 1
@@ -420,7 +424,9 @@ func (m *InstrumentedState) onWaitComplete(thread *ThreadState, isTimedOut bool)
 	exec.HandleSyscallUpdates(&thread.Cpu, &thread.Registers, v0, v1)
 }
 
-func (m *InstrumentedState) preemptThread(thread *ThreadState) bool {
+func (m *InstrumentedState) preemptThread(thread *ThreadState, reason string) bool {
+	oldThreadId := thread.ThreadId
+	oldPC := thread.Cpu.PC
 	// Pop thread from the current stack and push to the other stack
 	if m.state.TraverseRight {
 		rtThreadCnt := len(m.state.RightThreadStack)
@@ -443,6 +449,12 @@ func (m *InstrumentedState) preemptThread(thread *ThreadState) bool {
 	if len(current) == 0 {
 		m.state.TraverseRight = !m.state.TraverseRight
 		changeDirections = true
+	}
+
+	newThreadId := m.state.GetCurrentThread().ThreadId
+	if m.log.Enabled(context.Background(), log.LevelTrace) {
+		msg := fmt.Sprintf("Preempt thread: %v -> %v (%v)", oldThreadId, newThreadId, reason)
+		m.log.Trace(msg, "step", m.state.GetStep(), "pc", oldPC)
 	}
 
 	m.state.StepsSinceLastContextSwitch = 0
