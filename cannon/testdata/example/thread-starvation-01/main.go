@@ -10,40 +10,30 @@ import (
 func main() {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	var stopAtCount int32 = 20
-	var count int32 //
-	isStarted := func() bool {
-		return atomic.LoadInt32(&count) > 0
-	}
-	isDone := func() bool {
-		return atomic.LoadInt32(&count) >= stopAtCount
-	}
-	increment := func() {
-		atomic.AddInt32(&count, 1)
-	}
+	execTracker := NewExecTracker(50)
 
 	mu1, mu2 := sync.Mutex{}, sync.Mutex{}
 	cond1 := sync.NewCond(&mu1)
 	cond2 := sync.NewCond(&mu2)
-	ready1, ready2 := true, false // Start with Thread 1 ready
+	ready1, ready2 := false, false
 
 	// Thread 1
 	go func() {
 		fmt.Println("Start thread 1")
 		for {
-			if isDone() {
+			if execTracker.IsDone() {
 				wg.Done()
 				return
 			}
 
 			mu1.Lock()
-			for !ready1 && !isDone() {
+			for !ready1 && !execTracker.IsDone() {
 				cond1.Wait()
 			}
 
 			// Do some work
 			fmt.Println("Thread 1 working")
-			increment()
+			execTracker.Increment()
 
 			// Signal Thread 2
 			mu2.Lock()
@@ -60,18 +50,18 @@ func main() {
 	go func() {
 		fmt.Println("Start thread 2")
 		for {
-			if isDone() {
+			if execTracker.IsDone() {
 				wg.Done()
 				return
 			}
 
 			mu2.Lock()
-			for !ready2 && !isDone() {
+			for !ready2 && !execTracker.IsDone() {
 				cond2.Wait()
 			}
 			// Do some work
 			fmt.Println("Thread 2 working")
-			increment()
+			execTracker.Increment()
 
 			// Signal Thread 1
 			mu1.Lock()
@@ -85,18 +75,20 @@ func main() {
 	}()
 
 	// Thread 3
-	counter := 0
+	otherThreadCount := 0
 	go func() {
 		fmt.Println("Start thread 3")
 		for {
-			if isDone() {
+			// Only run this thread while threads 1 and 2 are executing to see if this thread gets scheduled
+			// concurrently
+			if execTracker.IsDone() {
 				return
 			}
 
-			if isStarted() {
+			if execTracker.IsStarted() {
 				// Only perform thread 3 work concurrently with threads 1 and 2
 				fmt.Println("Thread 3 working")
-				counter += 1
+				otherThreadCount += 1
 			}
 
 			time.Sleep(0)
@@ -110,5 +102,34 @@ func main() {
 	mu1.Unlock()
 
 	wg.Wait()
-	fmt.Printf("Counter: %v\n", counter)
+	fmt.Printf("Exec count: %v\n", execTracker.GetCount())
+	fmt.Printf("Other thread counter: %v\n", otherThreadCount)
+}
+
+type ExecTracker struct {
+	execCount   uint32
+	doneAtCount uint32
+}
+
+func NewExecTracker(terminationCount uint32) *ExecTracker {
+	return &ExecTracker{
+		execCount:   0,
+		doneAtCount: terminationCount,
+	}
+}
+
+func (a *ExecTracker) IsStarted() bool {
+	return a.GetCount() > 0
+}
+
+func (a *ExecTracker) IsDone() bool {
+	return a.GetCount() >= a.doneAtCount
+}
+
+func (a *ExecTracker) Increment() {
+	atomic.AddUint32(&a.execCount, 1)
+}
+
+func (a *ExecTracker) GetCount() uint32 {
+	return atomic.LoadUint32(&a.execCount)
 }
