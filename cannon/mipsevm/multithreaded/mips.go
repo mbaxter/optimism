@@ -125,8 +125,12 @@ func (m *InstrumentedState) handleSyscall() error {
 				thread.FutexVal = a2
 				if a3 == 0 {
 					thread.FutexTimeoutStep = exec.FutexNoTimeout
+					if m.log.Enabled(context.Background(), log.LevelTrace) {
+						m.log.Trace(fmt.Sprintf("Thread #%v Wait for %v", thread.ThreadId, effAddr), "step", m.state.GetStep())
+					}
 				} else {
 					thread.FutexTimeoutStep = m.state.Step + exec.FutexTimeoutSteps
+					m.log.Trace(fmt.Sprintf("Thread #%v Wait for %v w timeout %v", thread.ThreadId, effAddr, thread.FutexTimeoutStep), "step", m.state.GetStep())
 				}
 				// Leave cpu scalars as-is. This instruction will be completed by `onWaitComplete`
 				return nil
@@ -140,7 +144,7 @@ func (m *InstrumentedState) handleSyscall() error {
 			v0 = 0
 			v1 = 0
 			exec.HandleSyscallUpdates(&thread.Cpu, &thread.Registers, v0, v1)
-			m.preemptThread(thread, "FutexWake")
+			m.preemptThread(thread, fmt.Sprintf("FutexWake on %v", effAddr))
 			m.state.TraverseRight = len(m.state.LeftThreadStack) == 0
 			return nil
 		default:
@@ -453,8 +457,16 @@ func (m *InstrumentedState) preemptThread(thread *ThreadState, reason string) bo
 
 	newThreadId := m.state.GetCurrentThread().ThreadId
 	if m.log.Enabled(context.Background(), log.LevelTrace) {
+		leftStack, rightStack := m.state.getStackThreadIds()
 		msg := fmt.Sprintf("Preempt thread: %v -> %v (%v)", oldThreadId, newThreadId, reason)
 		m.log.Trace(msg, "step", m.state.GetStep(), "pc", oldPC)
+		if m.state.TraverseRight {
+			m.log.Trace(fmt.Sprintf("    left: %v (top)", leftStack))
+			m.log.Trace(fmt.Sprintf("    right: %v (top, active)", rightStack))
+		} else {
+			m.log.Trace(fmt.Sprintf("    left: %v (top, active)", leftStack))
+			m.log.Trace(fmt.Sprintf("    right: %v (top)", rightStack))
+		}
 	}
 
 	m.state.StepsSinceLastContextSwitch = 0

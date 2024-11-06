@@ -123,6 +123,18 @@ func (s *State) GetCurrentThread() *ThreadState {
 	return activeStack[activeStackSize-1]
 }
 
+func (s *State) getStackThreadIds() (left, right []Word) {
+	for _, t := range s.LeftThreadStack {
+		left = append(left, t.ThreadId)
+	}
+
+	for _, t := range s.RightThreadStack {
+		right = append(right, t.ThreadId)
+	}
+
+	return left, right
+}
+
 func (s *State) getActiveThreadStack() []*ThreadState {
 	var activeStack []*ThreadState
 	if s.TraverseRight {
