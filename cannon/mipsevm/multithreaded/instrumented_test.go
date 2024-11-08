@@ -35,12 +35,17 @@ func TestInstrumentedState_Claim(t *testing.T) {
 }
 
 func TestInstrumentedState_ThreadStarvation(t *testing.T) {
-	state, _ := testutil.LoadELFProgram(t, testutil.ProgramPath("thread-starvation-01"), CreateInitialState, false)
+	state, meta := testutil.LoadELFProgram(t, testutil.ProgramPath("thread-starvation-02"), CreateInitialState, false)
 	oracle := testutil.StaticOracle(t, []byte{})
 
 	var stdOutBuf, stdErrBuf bytes.Buffer
-	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), testutil.CreateTraceLogger(), nil)
-	for i := 0; i < 2_000_000; i++ {
+	logger := testutil.CreateLogger()
+	//logger := testutil.CreateTraceLogger()
+	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), logger, meta)
+	err := us.InitDebug()
+	require.NoError(t, err)
+
+	for i := 0; i < 70_000_000; i++ {
 		if us.GetState().GetExited() {
 			break
 		}
@@ -48,6 +53,10 @@ func TestInstrumentedState_ThreadStarvation(t *testing.T) {
 		require.NoError(t, err)
 	}
 	t.Logf("Completed in %d steps", state.Step)
+
+	if !state.Exited {
+		us.Traceback()
+	}
 
 	require.True(t, state.Exited, "must complete program")
 	require.Equal(t, uint8(0), state.ExitCode, "exit with 0")
