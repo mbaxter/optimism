@@ -35,12 +35,21 @@ func TestInstrumentedState_Claim(t *testing.T) {
 }
 
 func TestInstrumentedState_ThreadStarvation(t *testing.T) {
-	state, meta := testutil.LoadELFProgram(t, testutil.ProgramPath("thread-starvation-02"), CreateInitialState, false)
+	// Problematic programs
+	//programName := "thread-starvation-01" // Concurrent go routines make no progress
+	programName := "thread-starvation-03" // Makes no progress, gets stuck on 1 thread
+
+	// Programs that succeed
+	//programName := "thread-starvation-02" // Runs ok but takes 55104712 steps
+	//programName := "thread-starvation-04" // Runs ok
+
+	logger := testutil.CreateLogger()
+	//logger := testutil.CreateTraceLogger()
+
+	state, meta := testutil.LoadELFProgram(t, testutil.ProgramPath(programName), CreateInitialState, false)
 	oracle := testutil.StaticOracle(t, []byte{})
 
 	var stdOutBuf, stdErrBuf bytes.Buffer
-	logger := testutil.CreateLogger()
-	//logger := testutil.CreateTraceLogger()
 	us := NewInstrumentedState(state, oracle, io.MultiWriter(&stdOutBuf, os.Stdout), io.MultiWriter(&stdErrBuf, os.Stderr), logger, meta)
 	err := us.InitDebug()
 	require.NoError(t, err)
@@ -54,7 +63,7 @@ func TestInstrumentedState_ThreadStarvation(t *testing.T) {
 	}
 	t.Logf("Completed in %d steps", state.Step)
 
-	if !state.Exited {
+	if !state.Exited || state.ExitCode != uint8(0) {
 		us.Traceback()
 	}
 
