@@ -104,6 +104,10 @@ func main() {
 	wg.Wait()
 	fmt.Printf("Exec count: %v\n", execTracker.GetCount())
 	fmt.Printf("Other thread counter: %v\n", otherThreadCount)
+
+	if otherThreadCount == 0 {
+		panic("Other thread did not run!")
+	}
 }
 
 type ExecTracker struct {
