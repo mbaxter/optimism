@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,14 +20,19 @@ func main() {
 
 	state.wg.Wait()
 	fmt.Printf("Process exec counter: %v\n", state.idToExecCounter)
-	fmt.Printf("Heavy counter: %v\n", state.heavyCounter)
+	fmt.Printf("Heavy counter: %v\n", state.heavyCounter.Get())
 }
 
 func heavyComputation(state *State) {
+	fmt.Println("Start heavy computation")
 	for i := 0; i < 1e9; i++ {
 		// Intensive computation
 		_ = i * i
-		state.heavyCounter += 1
+		state.heavyCounter.Increment()
+		// Program works if logging is uncommented
+		//if i%10_000 == 0 {
+		//	fmt.Printf("Heavy comp: %v\n", i)
+		//}
 	}
 }
 
@@ -49,7 +55,7 @@ type State struct {
 	wg              *sync.WaitGroup
 	idToExecCounter map[int]int
 	targetExecCount int
-	heavyCounter    int
+	heavyCounter    *AtomicCounter
 }
 
 func NewState(workerCount, workerTargetCount int) *State {
@@ -59,6 +65,7 @@ func NewState(workerCount, workerTargetCount int) *State {
 		wg:              &wg,
 		idToExecCounter: make(map[int]int),
 		targetExecCount: workerTargetCount,
+		heavyCounter:    NewCounter(),
 	}
 }
 
@@ -67,4 +74,20 @@ func (s *State) incrementAndGetExecCounter(id int) int {
 	defer s.mu.Unlock()
 	s.idToExecCounter[id]++
 	return s.idToExecCounter[id]
+}
+
+type AtomicCounter struct {
+	value uint32
+}
+
+func NewCounter() *AtomicCounter {
+	return &AtomicCounter{value: 0}
+}
+
+func (a *AtomicCounter) Increment() {
+	atomic.AddUint32(&a.value, 1)
+}
+
+func (a *AtomicCounter) Get() uint32 {
+	return atomic.LoadUint32(&a.value)
 }
