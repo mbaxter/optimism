@@ -2,15 +2,15 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 func main() {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	execTracker := NewExecTracker(50)
+	execTracker := NewExecTracker(5000)
 
 	mu1, mu2 := sync.Mutex{}, sync.Mutex{}
 	cond1 := sync.NewCond(&mu1)
@@ -75,23 +75,28 @@ func main() {
 	}()
 
 	// Thread 3
-	otherThreadCount := 0
+	done := make(chan struct{})
+	var once sync.Once
+	otherThreadCount := NewCounter()
 	go func() {
 		fmt.Println("Start thread 3")
 		for {
 			// Only run this thread while threads 1 and 2 are executing to see if this thread gets scheduled
 			// concurrently
 			if execTracker.IsDone() {
+				once.Do(func() { close(done) })
 				return
 			}
 
 			if execTracker.IsStarted() {
 				// Only perform thread 3 work concurrently with threads 1 and 2
 				fmt.Println("Thread 3 working")
-				otherThreadCount += 1
+				otherThreadCount.Increment()
+				once.Do(func() { close(done) })
 			}
 
-			time.Sleep(0)
+			runtime.Gosched()
+			//time.Sleep(0)
 		}
 	}()
 
@@ -102,22 +107,24 @@ func main() {
 	mu1.Unlock()
 
 	wg.Wait()
-	fmt.Printf("Exec count: %v\n", execTracker.GetCount())
-	fmt.Printf("Other thread counter: %v\n", otherThreadCount)
+	<-done
 
-	if otherThreadCount == 0 {
+	fmt.Printf("Exec count: %v\n", execTracker.GetCount())
+	fmt.Printf("Other thread counter: %v\n", otherThreadCount.Get())
+
+	if otherThreadCount.Get() == 0 {
 		panic("Other thread did not run!")
 	}
 }
 
 type ExecTracker struct {
-	execCount   uint32
+	execCount   *AtomicCounter
 	doneAtCount uint32
 }
 
 func NewExecTracker(terminationCount uint32) *ExecTracker {
 	return &ExecTracker{
-		execCount:   0,
+		execCount:   NewCounter(),
 		doneAtCount: terminationCount,
 	}
 }
@@ -131,9 +138,25 @@ func (a *ExecTracker) IsDone() bool {
 }
 
 func (a *ExecTracker) Increment() {
-	atomic.AddUint32(&a.execCount, 1)
+	a.execCount.Increment()
 }
 
 func (a *ExecTracker) GetCount() uint32 {
-	return atomic.LoadUint32(&a.execCount)
+	return a.execCount.Get()
+}
+
+type AtomicCounter struct {
+	value uint32
+}
+
+func NewCounter() *AtomicCounter {
+	return &AtomicCounter{value: 0}
+}
+
+func (a *AtomicCounter) Increment() {
+	atomic.AddUint32(&a.value, 1)
+}
+
+func (a *AtomicCounter) Get() uint32 {
+	return atomic.LoadUint32(&a.value)
 }

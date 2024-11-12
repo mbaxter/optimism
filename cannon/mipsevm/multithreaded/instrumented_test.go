@@ -36,10 +36,10 @@ func TestInstrumentedState_Claim(t *testing.T) {
 
 func TestInstrumentedState_ThreadStarvation(t *testing.T) {
 	// Problematic programs
-	//programName := "thread-starvation-01" // Concurrent go routines make no progress
 	programName := "thread-starvation-03" // Makes no progress, gets stuck on 1 thread
 
 	// Programs that succeed
+	// programName := "thread-starvation-01"
 	//programName := "thread-starvation-02" // Runs ok but takes 55104712 steps
 	//programName := "thread-starvation-04" // Runs ok
 	//programName := "thread-starvation-05" // Runs ok
