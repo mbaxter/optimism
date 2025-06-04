@@ -18,7 +18,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
 	github.com/docker/docker v27.5.1+incompatible
 	github.com/ethereum-optimism/go-ethereum-hdwallet v0.1.3
-	github.com/ethereum-optimism/superchain-registry/validation v0.0.0-20250521132634-76f6d741b33f
+	github.com/ethereum-optimism/superchain-registry/validation v0.0.0-20250603144016-9c45ca7d4508
 	github.com/ethereum/go-ethereum v1.15.11
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -303,7 +303,7 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-replace github.com/ethereum/go-ethereum => github.com/ethereum-optimism/op-geth v1.101511.1-0.20250602182422-2ba5f6b747a4
+replace github.com/ethereum/go-ethereum => github.com/ethereum-optimism/op-geth v1.101511.1-dev.1.0.20250603002020-3e5073a7b5a4
 
 //replace github.com/ethereum/go-ethereum => ../op-geth
 
