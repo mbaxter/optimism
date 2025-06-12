@@ -368,7 +368,7 @@ func ABIEncoder(name string, args ...any) ([]byte, error) {
 		abiValue := CustomValueToABIValue(arg)
 		abiType, _, err := goTypeToABIType(goType)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		inputs[i] = abi.Argument{Type: abiType}
 		argsTranslated[i] = abiValue
@@ -379,7 +379,7 @@ func ABIEncoder(name string, args ...any) ([]byte, error) {
 	method := abi.NewMethod(name, name, abi.Function, "payable", false, false, inputs, abi.Arguments{})
 	arguments, err := method.Inputs.Pack(argsTranslated...)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	result := append(method.ID, arguments...)
 
