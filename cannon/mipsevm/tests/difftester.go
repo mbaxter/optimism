@@ -20,6 +20,10 @@ import (
 
 type TestNamer[T any] func(testCase T) string
 
+func NoopTestNamer[T any](c T) string {
+	return ""
+}
+
 type SingletonInitializeStateFn func(t require.TestingT, state *multithreaded.State, vm VersionedVMTestCase, r *testutil.RandHelper)
 type SingletonSetExpectationsFn func(t require.TestingT, expect *mtutil.ExpectedState, vm VersionedVMTestCase) ExpectedExecResult
 type SingletonPostStepCheckFn func(t require.TestingT, vm VersionedVMTestCase, deps *TestDependencies)
