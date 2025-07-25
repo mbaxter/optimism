@@ -26,7 +26,7 @@ func NoopTestNamer[T any](c T) string {
 
 type SingletonInitializeStateFn func(t require.TestingT, state *multithreaded.State, vm VersionedVMTestCase, r *testutil.RandHelper)
 type SingletonSetExpectationsFn func(t require.TestingT, expect *mtutil.ExpectedState, vm VersionedVMTestCase) ExpectedExecResult
-type SingletonPostStepCheckFn func(t require.TestingT, vm VersionedVMTestCase, deps *TestDependencies)
+type SingletonPostStepCheckFn func(t require.TestingT, vm VersionedVMTestCase, deps *TestDependencies, witness *mipsevm.StepWitness)
 
 type singletonTestCase struct {
 	name string
@@ -64,8 +64,8 @@ func (d *SingletonDiffTester) SetExpectations(setExpectationsFn SingletonSetExpe
 }
 
 func (d *SingletonDiffTester) PostCheck(postStepCheckFn SingletonPostStepCheckFn) *SingletonDiffTester {
-	wrappedFn := func(t require.TestingT, testCase singletonTestCase, vm VersionedVMTestCase, deps *TestDependencies) {
-		postStepCheckFn(t, vm, deps)
+	wrappedFn := func(t require.TestingT, testCase singletonTestCase, vm VersionedVMTestCase, deps *TestDependencies, wit *mipsevm.StepWitness) {
+		postStepCheckFn(t, vm, deps, wit)
 	}
 	d.diffTester.PostCheck(wrappedFn)
 
@@ -82,7 +82,7 @@ func (d *SingletonDiffTester) Run(t *testing.T, opts ...TestOption) {
 
 type InitializeStateFn[T any] func(t require.TestingT, testCase T, state *multithreaded.State, vm VersionedVMTestCase, r *testutil.RandHelper)
 type SetExpectationsFn[T any] func(t require.TestingT, testCase T, expect *mtutil.ExpectedState, vm VersionedVMTestCase) ExpectedExecResult
-type PostStepCheckFn[T any] func(t require.TestingT, testCase T, vm VersionedVMTestCase, deps *TestDependencies)
+type PostStepCheckFn[T any] func(t require.TestingT, testCase T, vm VersionedVMTestCase, deps *TestDependencies, witness *mipsevm.StepWitness)
 
 type DiffTester[T any] struct {
 	testNamer       TestNamer[T]
@@ -156,11 +156,11 @@ func (d *DiffTester[T]) run(t testRunner, testCases []T, opts ...TestOption) {
 					execExpectation := d.setExpectations(t, testCase, expect, vm)
 					mod.expectMod(expect)
 
-					execExpectation.assertExpectedResult(t, goVm, vm, expect, cfg)
+					witness := execExpectation.assertExpectedResult(t, goVm, vm, expect, cfg)
 
 					// Run post-step checks
 					if d.postStepCheck != nil {
-						d.postStepCheck(t, testCase, vm, testDeps)
+						d.postStepCheck(t, testCase, vm, testDeps, witness)
 					}
 				})
 			}
@@ -390,7 +390,7 @@ func newTestConfig(t require.TestingT, opts ...TestOption) *TestConfig {
 }
 
 type ExpectedExecResult interface {
-	assertExpectedResult(t testing.TB, vm mipsevm.FPVM, vmType VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig)
+	assertExpectedResult(t testing.TB, vm mipsevm.FPVM, vmType VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) *mipsevm.StepWitness
 }
 
 type normalExecResult struct{}
@@ -399,7 +399,7 @@ func ExpectNormalExecution() ExpectedExecResult {
 	return normalExecResult{}
 }
 
-func (e normalExecResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) {
+func (e normalExecResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) *mipsevm.StepWitness {
 	// Step the VM
 	state := goVm.GetState()
 	step := state.GetStep()
@@ -409,6 +409,8 @@ func (e normalExecResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, 
 	// Validate
 	expect.Validate(t, state)
 	testutil.ValidateEVM(t, stepWitness, step, goVm, vmVersion.StateHashFn, vmVersion.Contracts)
+
+	return stepWitness
 }
 
 type vmPanicResult struct {
@@ -454,7 +456,7 @@ func ExpectVmPanicWithCustomErr(goPanicMsg interface{}, customErrSignature strin
 	return result
 }
 
-func (e vmPanicResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) {
+func (e vmPanicResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) *mipsevm.StepWitness {
 	state := goVm.GetState()
 	proofData := e.proofData
 	if proofData == nil {
@@ -469,6 +471,8 @@ func (e vmPanicResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmV
 	} else {
 		t.Fatalf("Invalid panic value provided.  Go panic value must be a string or error.  Got: %v", e.panicValue)
 	}
+
+	return nil
 }
 
 type preimageOracleRevertResult struct {
@@ -487,9 +491,10 @@ func ExpectPreimageOraclePanic(preimageKey [32]byte, preimageValue []byte, preim
 	}
 }
 
-func (e preimageOracleRevertResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) {
+func (e preimageOracleRevertResult) assertExpectedResult(t testing.TB, goVm mipsevm.FPVM, vmVersion VersionedVMTestCase, expect *mtutil.ExpectedState, cfg *TestConfig) *mipsevm.StepWitness {
 	require.PanicsWithValue(t, e.panicMsg, func() { _, _ = goVm.Step(true) })
 	testutil.AssertPreimageOracleReverts(t, e.preimageKey, e.preimageValue, e.preimageOffset, vmVersion.Contracts)
+	return nil
 }
 
 type testcaseT interface {
