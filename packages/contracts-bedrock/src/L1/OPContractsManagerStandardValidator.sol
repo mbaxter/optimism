@@ -190,8 +190,12 @@ contract OPContractsManagerStandardValidator is ISemver {
     }
 
     /// @notice Returns the expected PermissionedDisputeGame version.
-    function permissionedDisputeGameVersion() public pure returns (string memory) {
-        return "1.8.0";
+    function permissionedDisputeGameVersion() public view returns (string memory) {
+        if (DevFeatures.isDevFeatureEnabled(devFeatureBitmap, DevFeatures.DEPLOY_V2_DISPUTE_GAMES)) {
+            return "2.1.0";
+        } else {
+            return "1.8.0";
+        }
     }
 
     /// @notice Returns the expected PreimageOracle version.
