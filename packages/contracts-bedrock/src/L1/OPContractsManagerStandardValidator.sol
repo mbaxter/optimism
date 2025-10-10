@@ -519,9 +519,9 @@ contract OPContractsManagerStandardValidator is ISemver {
             ValidateDisputeGameParams({
                 errors: errors,
                 sysCfg: _params.sysCfg,
-                game: _game,
                 factory: _factory,
-                fdgArgs: pdgArgs.fdgArgs,
+                gameImpl: _game,
+                gameArgs: pdgArgs.fdgArgs,
                 absolutePrestate: _params.absolutePrestate,
                 l2ChainID: _params.l2ChainID,
                 admin: _params.admin,
@@ -579,9 +579,9 @@ contract OPContractsManagerStandardValidator is ISemver {
             ValidateDisputeGameParams({
                 errors: _errors,
                 sysCfg: _sysCfg,
-                game: _game,
                 factory: _factory,
-                fdgArgs: fdgArgs,
+                gameImpl: _game,
+                gameArgs: fdgArgs,
                 absolutePrestate: _absolutePrestate,
                 l2ChainID: _l2ChainID,
                 admin: _admin,
@@ -705,26 +705,26 @@ contract OPContractsManagerStandardValidator is ISemver {
     {
         (FaultDisputeGameImplArgs memory fdgArgs, uint256 offset) = decodeFaultDisputeGameImplArgs(data);
 
-        address proposer;
-        address challenger;
+        address decodedProposer;
+        address decodedChallenger;
         assembly {
             let ptr := offset
 
-            proposer := shr(96, mload(ptr))
+            decodedProposer := shr(96, mload(ptr))
             ptr := add(ptr, 20)
 
-            challenger := shr(96, mload(ptr))
+            decodedChallenger := shr(96, mload(ptr))
         }
 
-        pdgArgs_ = PermissionedDisputeGameImplArgs({ fdgArgs: fdgArgs, proposer: proposer, challenger: challenger });
+        pdgArgs_ = PermissionedDisputeGameImplArgs({ fdgArgs: fdgArgs, proposer: decodedProposer, challenger: decodedChallenger});
     }
 
     struct ValidateDisputeGameParams {
         string errors;
         ISystemConfig sysCfg;
-        IPermissionedDisputeGame game;
         IDisputeGameFactory factory;
-        FaultDisputeGameImplArgs fdgArgs;
+        IPermissionedDisputeGame gameImpl;
+        FaultDisputeGameImplArgs gameArgs;
         bytes32 absolutePrestate;
         uint256 l2ChainID;
         IProxyAdmin admin;
@@ -738,22 +738,22 @@ contract OPContractsManagerStandardValidator is ISemver {
         // Gather inputs to validate
         bool isV2Contract = DevFeatures.isDevFeatureEnabled(devFeatureBitmap, DevFeatures.DEPLOY_V2_DISPUTE_GAMES);
         bytes32 gamePrestate =
-            isV2Contract ? _params.fdgArgs.absolutePrestate : Claim.unwrap(_params.game.absolutePrestate());
-        address gameVm = isV2Contract ? _params.fdgArgs.vm : address(_params.game.vm());
+            isV2Contract ? _params.gameArgs.absolutePrestate : Claim.unwrap(_params.gameImpl.absolutePrestate());
+        address gameVm = isV2Contract ? _params.gameArgs.vm : address(_params.gameImpl.vm());
         IAnchorStateRegistry gameASR = isV2Contract
-            ? IAnchorStateRegistry(_params.fdgArgs.anchorStateRegistry)
-            : _params.game.anchorStateRegistry();
+            ? IAnchorStateRegistry(_params.gameArgs.anchorStateRegistry)
+            : _params.gameImpl.anchorStateRegistry();
         (Hash anchorRoot,) = gameASR.getAnchorRoot();
-        IDelayedWETH gameWETH = isV2Contract ? IDelayedWETH(payable(_params.fdgArgs.delayedWeth)) : _params.game.weth();
-        uint256 gameL2ChainId = isV2Contract ? _params.fdgArgs.l2ChainId : _params.game.l2ChainId();
+        IDelayedWETH gameWETH = isV2Contract ? IDelayedWETH(payable(_params.gameArgs.delayedWeth)) : _params.gameImpl.weth();
+        uint256 gameL2ChainId = isV2Contract ? _params.gameArgs.l2ChainId : _params.gameImpl.l2ChainId();
 
         string memory errors = internalRequire(
-            LibString.eq(getVersion(address(_params.game)), permissionedDisputeGameVersion()),
+            LibString.eq(getVersion(address(_params.gameImpl)), permissionedDisputeGameVersion()),
             string.concat(_params.errorPrefix, "-20"),
             _params.errors
         );
         errors = internalRequire(
-            GameType.unwrap(_params.game.gameType()) == GameType.unwrap(_params.gameType),
+            GameType.unwrap(_params.gameImpl.gameType()) == GameType.unwrap(_params.gameType),
             string.concat(_params.errorPrefix, "-30"),
             errors
         );
@@ -761,14 +761,14 @@ contract OPContractsManagerStandardValidator is ISemver {
             internalRequire(gamePrestate == _params.absolutePrestate, string.concat(_params.errorPrefix, "-40"), errors);
         errors = internalRequire(gameL2ChainId == _params.l2ChainID, string.concat(_params.errorPrefix, "-60"), errors);
         errors =
-            internalRequire(_params.game.l2SequenceNumber() == 0, string.concat(_params.errorPrefix, "-70"), errors);
+            internalRequire(_params.gameImpl.l2SequenceNumber() == 0, string.concat(_params.errorPrefix, "-70"), errors);
         errors = internalRequire(
-            Duration.unwrap(_params.game.clockExtension()) == 10800, string.concat(_params.errorPrefix, "-80"), errors
+            Duration.unwrap(_params.gameImpl.clockExtension()) == 10800, string.concat(_params.errorPrefix, "-80"), errors
         );
-        errors = internalRequire(_params.game.splitDepth() == 30, string.concat(_params.errorPrefix, "-90"), errors);
-        errors = internalRequire(_params.game.maxGameDepth() == 73, string.concat(_params.errorPrefix, "-100"), errors);
+        errors = internalRequire(_params.gameImpl.splitDepth() == 30, string.concat(_params.errorPrefix, "-90"), errors);
+        errors = internalRequire(_params.gameImpl.maxGameDepth() == 73, string.concat(_params.errorPrefix, "-100"), errors);
         errors = internalRequire(
-            Duration.unwrap(_params.game.maxClockDuration()) == 302400,
+            Duration.unwrap(_params.gameImpl.maxClockDuration()) == 302400,
             string.concat(_params.errorPrefix, "-110"),
             errors
         );
@@ -787,7 +787,7 @@ contract OPContractsManagerStandardValidator is ISemver {
         // Only assert valid preimage oracle if the game VM is valid, since otherwise
         // the contract is likely to revert.
         if (gameVm == mipsImpl) {
-            errors = assertValidPreimageOracle(errors, _params.game.vm().oracle(), _params.errorPrefix);
+            errors = assertValidPreimageOracle(errors, _params.gameImpl.vm().oracle(), _params.errorPrefix);
         }
 
         return errors;
