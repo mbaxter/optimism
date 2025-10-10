@@ -787,7 +787,7 @@ contract OPContractsManagerStandardValidator is ISemver {
         // Only assert valid preimage oracle if the game VM is valid, since otherwise
         // the contract is likely to revert.
         if (gameVm == mipsImpl) {
-            errors = assertValidPreimageOracle(errors, _params.gameImpl.vm().oracle(), _params.errorPrefix);
+            errors = assertValidPreimageOracle(errors, IMIPS64(gameVm).oracle(), _params.errorPrefix);
         }
 
         return errors;
