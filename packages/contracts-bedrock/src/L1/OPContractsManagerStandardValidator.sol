@@ -716,7 +716,11 @@ contract OPContractsManagerStandardValidator is ISemver {
             decodedChallenger := shr(96, mload(ptr))
         }
 
-        pdgArgs_ = PermissionedDisputeGameImplArgs({ fdgArgs: fdgArgs, proposer: decodedProposer, challenger: decodedChallenger});
+        pdgArgs_ = PermissionedDisputeGameImplArgs({
+            fdgArgs: fdgArgs,
+            proposer: decodedProposer,
+            challenger: decodedChallenger
+        });
     }
 
     struct ValidateDisputeGameParams {
@@ -744,7 +748,8 @@ contract OPContractsManagerStandardValidator is ISemver {
             ? IAnchorStateRegistry(_params.gameArgs.anchorStateRegistry)
             : _params.gameImpl.anchorStateRegistry();
         (Hash anchorRoot,) = gameASR.getAnchorRoot();
-        IDelayedWETH gameWETH = isV2Contract ? IDelayedWETH(payable(_params.gameArgs.delayedWeth)) : _params.gameImpl.weth();
+        IDelayedWETH gameWETH =
+            isV2Contract ? IDelayedWETH(payable(_params.gameArgs.delayedWeth)) : _params.gameImpl.weth();
         uint256 gameL2ChainId = isV2Contract ? _params.gameArgs.l2ChainId : _params.gameImpl.l2ChainId();
 
         string memory errors = internalRequire(
@@ -763,10 +768,13 @@ contract OPContractsManagerStandardValidator is ISemver {
         errors =
             internalRequire(_params.gameImpl.l2SequenceNumber() == 0, string.concat(_params.errorPrefix, "-70"), errors);
         errors = internalRequire(
-            Duration.unwrap(_params.gameImpl.clockExtension()) == 10800, string.concat(_params.errorPrefix, "-80"), errors
+            Duration.unwrap(_params.gameImpl.clockExtension()) == 10800,
+            string.concat(_params.errorPrefix, "-80"),
+            errors
         );
         errors = internalRequire(_params.gameImpl.splitDepth() == 30, string.concat(_params.errorPrefix, "-90"), errors);
-        errors = internalRequire(_params.gameImpl.maxGameDepth() == 73, string.concat(_params.errorPrefix, "-100"), errors);
+        errors =
+            internalRequire(_params.gameImpl.maxGameDepth() == 73, string.concat(_params.errorPrefix, "-100"), errors);
         errors = internalRequire(
             Duration.unwrap(_params.gameImpl.maxClockDuration()) == 302400,
             string.concat(_params.errorPrefix, "-110"),
